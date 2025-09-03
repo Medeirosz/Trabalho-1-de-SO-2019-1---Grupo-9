@@ -84,8 +84,47 @@ public class trabalho_1_so_grupo9 {
     }
 
     // funcao de remover o ultimo processo de uma fila
-    public static void popProcess(int fila) {
-        
+    public static int popProcess(int fila) {
+        switch (fila) {
+            case 0: // HIGH
+                if (highPriorityCount == 0) {
+                    return -1; // fila vazia
+                }
+                int pidH = highPriority[highPriorityHead];
+                highPriorityHead = (highPriorityHead + 1) % MAX_PROCS;
+                highPriorityCount--;
+                return pidH;
+    
+            case 1: // LOW
+                if (lowPriorityCount == 0) return -1;
+                int pidL = lowPriority[lowPriorityHead];
+                lowPriorityHead = (lowPriorityHead + 1) % MAX_PROCS;
+                lowPriorityCount--;
+                return pidL;
+    
+            case 2: // DISK
+                if (diskIoCount == 0) return -1;
+                int processIdDisk = ioDisk[diskIoHead];
+                diskIoHead = (diskIoHead + 1) % MAX_PROCS;
+                diskIoCount--;
+                return processIdDisk;
+
+            case 3: // Tape
+                if (tapeIoCount == 0) return -1;
+                int processIdTape = ioTape[tapeIoHead];
+                tapeIoHead = (tapeIoHead + 1) % MAX_PROCS;
+                tapeIoCount--;
+                return processIdTape;
+
+            case 4: // Printer
+                if (printerIoCount == 0) return -1;
+                int processIdPrinter = ioTape[tapeIoHead];
+                tapeIoHead = (tapeIoHead + 1) % MAX_PROCS;
+                tapeIoCount--;
+                return processIdPrinter;
+
+        }
+        return -1; 
     }
 
     // funcao de ver o proximo processo de uma fila
