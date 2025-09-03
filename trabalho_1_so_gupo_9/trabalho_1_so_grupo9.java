@@ -27,10 +27,60 @@ public class trabalho_1_so_grupo9 {
     static int printerIoHead, printerIoTail, printerIoCount = 0;
 
     // funcao de inserir processo de uma fila
-    public static void push(int fila, int processId) {
-        if (){
+    public static boolean push(int fila, int processId) {
+        switch (fila) {
+            case 0: // HIGH
+                if (highPriorityCount == MAX_PROCS) {
+                 return false;   
+                }
 
+                highPriority[highPriorityTail] = processId;
+                highPriorityTail = (highPriorityTail + 1) % MAX_PROCS;
+                highPriorityCount++;
+                return true;
+    
+            case 1: // LOW
+                if (lowPriorityCount == MAX_PROCS) {
+                    return false;
+                }
+
+                lowPriority[lowPriorityTail] = processId;
+                lowPriorityTail = (lowPriorityTail + 1) % MAX_PROCS;
+                lowPriorityCount++;
+                return true;
+                
+            case 2: // DISK
+                if (diskIoCount == MAX_PROCS) {
+                    return false;
+                }
+                
+                ioDisk[diskIoTail] = processId;
+                diskIoTail = (diskIoTail + 1) % MAX_PROCS;
+                diskIoCount++;
+                return true;
+
+            case 3: // TAPE
+                if (tapeIoCount == MAX_PROCS) {
+                    return false;
+                }
+                
+                ioTape[tapeIoTail] = processId;
+                tapeIoTail = (tapeIoTail + 1) % MAX_PROCS;
+                tapeIoCount++;
+                return true;
+
+            case 4: // PRINTER
+                if (printerIoCount == MAX_PROCS) {
+                    return false;
+                }
+                
+                ioPrinter[printerIoTail] = processId;
+                printerIoTail = (printerIoTail + 1) % MAX_PROCS;
+                printerIoCount++;
+                return true;
+            
         }
+        return false;
     }
 
     // funcao de remover o ultimo processo de uma fila
@@ -38,7 +88,7 @@ public class trabalho_1_so_grupo9 {
         
     }
 
-    // funcao de remover o ultimo processo de uma fila
+    // funcao de ver o proximo processo de uma fila
     public static void peekProcess(int fila) {
         
     }
