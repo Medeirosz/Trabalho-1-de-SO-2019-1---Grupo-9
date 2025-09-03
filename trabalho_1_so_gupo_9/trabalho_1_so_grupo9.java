@@ -118,22 +118,62 @@ public class trabalho_1_so_grupo9 {
 
             case 4: // Printer
                 if (printerIoCount == 0) return -1;
-                int processIdPrinter = ioTape[tapeIoHead];
-                tapeIoHead = (tapeIoHead + 1) % MAX_PROCS;
-                tapeIoCount--;
-                return processIdPrinter;
+                int printerIdPrinter = ioPrinter[printerIoHead];
+                printerIoHead = (tapeIoHead + 1) % MAX_PROCS;
+                printerIoCount--;
+                return printerIdPrinter;
 
         }
         return -1; 
     }
 
-    // funcao de ver o proximo processo de uma fila
-    public static void peekProcess(int fila) {
-        
+    // funcao de ver o proximo processo de uma fila (sem remover)
+    public static int peekProcess(int fila) {
+        switch (fila) {
+            case 0: // HIGH
+                if (highPriorityCount == 0) return -1;
+                return highPriority[highPriorityHead];
+
+            case 1: // LOW
+                if (lowPriorityCount == 0) return -1;
+                return lowPriority[lowPriorityHead];
+
+            case 2: // DISK
+                if (diskIoCount == 0) return -1;
+                return ioDisk[diskIoHead];
+
+            case 3: // TAPE
+                if (tapeIoCount == 0) return -1;
+                return ioTape[tapeIoHead];
+
+            case 4: // PRINTER
+                if (printerIoCount == 0) return -1;
+                return ioPrinter[printerIoHead];
+
+            default:
+                return -1; // fila inválida
+        }
     }
 
  
+
     public static void main(String[] args) {
-        
+
+        // TESTE NUMERO 1
+        push(0, 10);
+        push(0, 11);
+        push(0, 12);
+    
+        System.out.println("peek HIGH = " + peekProcess(0)); // 10
+    
+        System.out.println("pop HIGH = " + popProcess(0)); // 10
+        System.out.println("pop HIGH = " + popProcess(0)); // 11
+        System.out.println("pop HIGH = " + popProcess(0)); // 12
+        System.out.println("pop HIGH = " + popProcess(0)); // -1 (vazia)
+    
+        // Testa PRINTER 
+        push(4, 7);
+        System.out.println("peek PRINTER = " + peekProcess(4)); // 7
+        System.out.println("pop PRINTER = " + popProcess(4));   // 7
     }
 }
