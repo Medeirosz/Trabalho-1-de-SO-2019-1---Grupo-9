@@ -21,7 +21,7 @@ public class trabalho_1_so_grupo9 {
     static int NumberTest = 3;
 
     // controle da simulação
-    static int ticks = 0;   
+    static int ticks = 0;
     static int running = -1;  // pid atual na CPU (-1 = livre)
     static int level   = -1;  // 1 se veio da HIGH, 0 se da LOW
     static int finished = 0;
@@ -45,6 +45,8 @@ public class trabalho_1_so_grupo9 {
     static final int IO_NONE=0, IO_DISK=1, IO_TAPE=2, IO_PRINTER=3;
 
     // “PCB” em arrays (índice = pid)
+    static int[] pid         = new int[MAX_PROCS]; // NOVO: PID explícito
+    static int[] ppid        = new int[MAX_PROCS]; // NOVO: PPID (usaremos 0=init)
     static int[] status      = new int[MAX_PROCS];
     static int[] priority    = new int[MAX_PROCS]; // 1=alta, 0=baixa (preferência)
     static int[] cur         = new int[MAX_PROCS]; // índice do burst atual
@@ -62,7 +64,7 @@ public class trabalho_1_so_grupo9 {
     static int[] tFinish   = new int[MAX_PROCS]; // turnaround (chegada = 0)
     static int[] waitReady = new int[MAX_PROCS]; // espera em filas de prontos
 
-    // filas
+    // filas (push/pop/peek)
     static boolean push(int fila, int pid) {
         switch (fila) {
             case 0:
@@ -149,47 +151,51 @@ public class trabalho_1_so_grupo9 {
     // workload
 
     // gera bursts aleatórios para 1 processo e coloca na HIGH
-    static void genProc(int pid){
+    static void genProc(int i){
+        // NOVO: preencher PID/PPID
+        pid[i]  = i;
+        ppid[i] = 0; // "init" (atende o PDF sem complicar)
+
         int bursts = BURSTS_MIN + R.nextInt(BURSTS_MAX - BURSTS_MIN + 1);
-        nb[pid] = bursts;
+        nb[i] = bursts;
 
         for (int k=0; k<bursts; k++){
-            cpuBurst[pid][k] = CPU_MIN + R.nextInt(CPU_MAX - CPU_MIN + 1);
+            cpuBurst[i][k] = CPU_MIN + R.nextInt(CPU_MAX - CPU_MIN + 1);
             if (k < bursts-1){
                 int dev = 1 + R.nextInt(3); // 1=DISK, 2=TAPE, 3=PRINTER
-                ioType[pid][k] = dev;
-                ioDur[pid][k]  = IO_MIN + R.nextInt(IO_MAX - IO_MIN + 1);
+                ioType[i][k] = dev;
+                ioDur[i][k]  = IO_MIN + R.nextInt(IO_MAX - IO_MIN + 1);
             } else {
-                ioType[pid][k] = IO_NONE;
-                ioDur[pid][k]  = 0;
+                ioType[i][k] = IO_NONE;
+                ioDur[i][k]  = 0;
             }
         }
 
-        status[pid]=READY;
-        priority[pid]=1; // inicia na alta
-        cur[pid]=0;
-        remainCpu[pid]=cpuBurst[pid][0];
-        remainIo[pid]=0;
-        quantumLeft[pid]=QUANTUM_HIGH;
-        totalCpu[pid]=0;
+        status[i]=READY;
+        priority[i]=1; // inicia na alta
+        cur[i]=0;
+        remainCpu[i]=cpuBurst[i][0];
+        remainIo[i]=0;
+        quantumLeft[i]=QUANTUM_HIGH;
+        totalCpu[i]=0;
 
-        push(0, pid); // high
+        push(0, i); // high
     }
 
     static void setupRandom(int n){
-        for (int pid=0; pid<n; pid++) genProc(pid);
+        for (int i=0; i<n; i++) genProc(i);
         dumpWorkload(n);
     }
 
     static void dumpWorkload(int n){
         System.out.println("== Workload (seed="+SEED+") ==");
-        for(int pid=0; pid<n; pid++){
-            StringBuilder sb = new StringBuilder("PID "+pid+": ");
-            for(int k=0;k<nb[pid];k++){
-                sb.append("CPU").append(cpuBurst[pid][k]);
-                if(ioType[pid][k]==IO_DISK)       sb.append("->DISK").append(ioDur[pid][k]).append("->");
-                else if(ioType[pid][k]==IO_TAPE)  sb.append("->TAPE").append(ioDur[pid][k]).append("->");
-                else if(ioType[pid][k]==IO_PRINTER) sb.append("->PRINT").append(ioDur[pid][k]).append("->");
+        for(int i=0; i<n; i++){
+            StringBuilder sb = new StringBuilder("PID "+pid[i]+" (PPID "+ppid[i]+") : ");
+            for(int k=0;k<nb[i];k++){
+                sb.append("CPU").append(cpuBurst[i][k]);
+                if(ioType[i][k]==IO_DISK)         sb.append("->DISK").append(ioDur[i][k]).append("->");
+                else if(ioType[i][k]==IO_TAPE)    sb.append("->TAPE").append(ioDur[i][k]).append("->");
+                else if(ioType[i][k]==IO_PRINTER) sb.append("->PRINT").append(ioDur[i][k]).append("->");
             }
             if(sb.toString().endsWith("->")) sb.setLength(sb.length()-2);
             System.out.println(sb);
@@ -197,53 +203,53 @@ public class trabalho_1_so_grupo9 {
     }
 
     // escalador / IO / CPU
-   
+
     // escolhe processo: HIGH primeiro, depois LOW
     static void schedule() {
         if (running != -1) return;
-        int pid = popProcess(0);
-        if (pid != -1) {
-            running = pid; level = 1; status[pid]=RUNNING; quantumLeft[pid]=QUANTUM_HIGH;
-            System.out.println("t="+ticks+" | SCHED HIGH -> pid="+pid);
+        int p = popProcess(0);
+        if (p != -1) {
+            running = p; level = 1; status[p]=RUNNING; quantumLeft[p]=QUANTUM_HIGH;
+            System.out.println("t="+ticks+" | SCHED HIGH -> pid="+p);
             return;
         }
-        pid = popProcess(1);
-        if (pid != -1) {
-            running = pid; level = 0; status[pid]=RUNNING; quantumLeft[pid]=QUANTUM_LOW;
-            System.out.println("t="+ticks+" | SCHED LOW  -> pid="+pid);
+        p = popProcess(1);
+        if (p != -1) {
+            running = p; level = 0; status[p]=RUNNING; quantumLeft[p]=QUANTUM_LOW;
+            System.out.println("t="+ticks+" | SCHED LOW  -> pid="+p);
         }
     }
 
     // avança 1 tick de I/O no primeiro de cada fila de dispositivo
     static void stepIO() {
         if (diskIoCount > 0) {
-            int pid = ioDisk[diskIoHead];
-            remainIo[pid]--;
-            if (remainIo[pid] <= 0) {
+            int p = ioDisk[diskIoHead];
+            remainIo[p]--;
+            if (remainIo[p] <= 0) {
                 popProcess(2);
-                status[pid]=READY; priority[pid]=0; // DISK volta baixa
-                push(1, pid);
-                System.out.println("t="+ticks+" | IO_END DISK  pid="+pid+" -> LOW");
+                status[p]=READY; priority[p]=0; // DISK volta baixa
+                push(1, p);
+                System.out.println("t="+ticks+" | IO_END DISK  pid="+p+" -> LOW");
             }
         }
         if (tapeIoCount > 0) {
-            int pid = ioTape[tapeIoHead];
-            remainIo[pid]--;
-            if (remainIo[pid] <= 0) {
+            int p = ioTape[tapeIoHead];
+            remainIo[p]--;
+            if (remainIo[p] <= 0) {
                 popProcess(3);
-                status[pid]=READY; priority[pid]=1; // TAPE volta alta
-                push(0, pid);
-                System.out.println("t="+ticks+" | IO_END TAPE  pid="+pid+" -> HIGH");
+                status[p]=READY; priority[p]=1; // TAPE volta alta
+                push(0, p);
+                System.out.println("t="+ticks+" | IO_END TAPE  pid="+p+" -> HIGH");
             }
         }
         if (printerIoCount > 0) {
-            int pid = ioPrinter[printerIoHead];
-            remainIo[pid]--;
-            if (remainIo[pid] <= 0) {
+            int p = ioPrinter[printerIoHead];
+            remainIo[p]--;
+            if (remainIo[p] <= 0) {
                 popProcess(4);
-                status[pid]=READY; priority[pid]=1; // PRINTER volta alta
-                push(0, pid);
-                System.out.println("t="+ticks+" | IO_END PRINT pid="+pid+" -> HIGH");
+                status[p]=READY; priority[p]=1; // PRINTER volta alta
+                push(0, p);
+                System.out.println("t="+ticks+" | IO_END PRINT pid="+p+" -> HIGH");
             }
         }
     }
@@ -317,22 +323,22 @@ public class trabalho_1_so_grupo9 {
 
     // métricas / log auxiliar
     static void accrueWaitingAll(){
-        for(int pid=0; pid<NumberTest; pid++){
-            if(status[pid]==READY) waitReady[pid]++;
+        for(int i=0; i<NumberTest; i++){
+            if(status[i]==READY) waitReady[i]++;
         }
     }
 
     static void printStats(){
         System.out.println("== Estatísticas ==");
         double sumTurn=0, sumWait=0;
-        for(int pid=0; pid<NumberTest; pid++){
-            int turn = tFinish[pid];
+        for(int i=0; i<NumberTest; i++){
+            int turn = tFinish[i];
             sumTurn += turn;
-            sumWait += waitReady[pid];
-            System.out.println("PID "+pid+
+            sumWait += waitReady[i];
+            System.out.println("PID "+pid[i]+" (PPID "+ppid[i]+")"+
                     " | turnaround="+turn+
-                    " | esperaReady="+waitReady[pid]+
-                    " | cpuTotal="+totalCpu[pid]);
+                    " | esperaReady="+waitReady[i]+
+                    " | cpuTotal="+totalCpu[i]);
         }
         System.out.println("média turnaround="+(sumTurn/NumberTest));
         System.out.println("média esperaReady="+(sumWait/NumberTest));
@@ -346,7 +352,7 @@ public class trabalho_1_so_grupo9 {
             if (running == -1) schedule();
             stepIO();
             runTick();
-            // printQueues(); // se quiser debugar filas
+            // printQueues(); 
             accrueWaitingAll();
             ticks++;
         }
@@ -354,7 +360,7 @@ public class trabalho_1_so_grupo9 {
         printStats();
     }
 
-    // opcional pra depurar filas (não usado por padrão)
+    // opcional pra debug
     static void printQueues(){
         System.out.print("t="+ticks+" | HIGH:[");
         for(int i=0, idx=highPriorityHead; i<highPriorityCount; i++, idx=(idx+1)%MAX_PROCS)
