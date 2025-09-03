@@ -21,7 +21,7 @@ public class trabalho_1_so_grupo9 {
     static int NumberTest = 3;
 
     // controle da simulação
-    static int ticks = 0;     // “tempo”
+    static int ticks = 0;   
     static int running = -1;  // pid atual na CPU (-1 = livre)
     static int level   = -1;  // 1 se veio da HIGH, 0 se da LOW
     static int finished = 0;
@@ -62,10 +62,7 @@ public class trabalho_1_so_grupo9 {
     static int[] tFinish   = new int[MAX_PROCS]; // turnaround (chegada = 0)
     static int[] waitReady = new int[MAX_PROCS]; // espera em filas de prontos
 
-    // ------------------------------------------------------------
-    // FILAS (push / pop / peek)
-    // ------------------------------------------------------------
-
+    // filas
     static boolean push(int fila, int pid) {
         switch (fila) {
             case 0:
@@ -149,11 +146,9 @@ public class trabalho_1_so_grupo9 {
         return -1;
     }
 
-    // ------------------------------------------------------------
-    // WORKLOAD
-    // ------------------------------------------------------------
+    // workload
 
-    // Gera bursts aleatórios para 1 processo e coloca na HIGH
+    // gera bursts aleatórios para 1 processo e coloca na HIGH
     static void genProc(int pid){
         int bursts = BURSTS_MIN + R.nextInt(BURSTS_MAX - BURSTS_MIN + 1);
         nb[pid] = bursts;
@@ -178,7 +173,7 @@ public class trabalho_1_so_grupo9 {
         quantumLeft[pid]=QUANTUM_HIGH;
         totalCpu[pid]=0;
 
-        push(0, pid); // HIGH
+        push(0, pid); // high
     }
 
     static void setupRandom(int n){
@@ -201,10 +196,8 @@ public class trabalho_1_so_grupo9 {
         }
     }
 
-    // ------------------------------------------------------------
-    // ESCALONADOR / I/O / CPU
-    // ------------------------------------------------------------
-
+    // escalador / IO / CPU
+   
     // escolhe processo: HIGH primeiro, depois LOW
     static void schedule() {
         if (running != -1) return;
@@ -322,7 +315,7 @@ public class trabalho_1_so_grupo9 {
         }
     }
 
-    // MÉTRICAS / LOG AUXILIAR
+    // métricas / log auxiliar
     static void accrueWaitingAll(){
         for(int pid=0; pid<NumberTest; pid++){
             if(status[pid]==READY) waitReady[pid]++;
