@@ -1,418 +1,327 @@
+// Simulador MUITO simples de RR com feedback (2 filas de prontos) + 3 filas de I/O).
+// Estilo: poucos métodos, variáveis claras e comentários curtos.
+
 package sistemas_operacionais_I.trabalho_1_so_gupo_9;
 
 import java.util.Random;
 
 public class trabalho_1_so_grupo9 {
 
-    // limites e quantuns
-    static int MAX_PROCS = 6;
-    static int MAX_BURSTS = 10;
-    static int QUANTUM_HIGH = 4;
-    static int QUANTUM_LOW  = 3;
+    // configuração básica
+    static final int MAX_PROCS = 6, MAX_BURSTS = 10;
+    static final int QUANTUM_HIGH = 4, QUANTUM_LOW = 2;       // quantum baixo = 2
+    static final int CPU_MIN = 2, CPU_MAX = 4;                // CPU até 4
+    static final int DISK_MIN = 1, DISK_MAX = 4;              // I/O por tipo
+    static final int TAPE_MIN = 1, TAPE_MAX = 3;
+    static final int PRINTER_MIN  = 2, PRINTER_MAX  = 4;
+    static final int PROCS = 3;                               // quantos processos criar
+    static final Random R = new Random();                     // sem seed fixa
 
-    // geração aleatória
-    static final int CPU_MIN = 2, CPU_MAX = 4;
-    static final int IO_MIN = 1, IO_MAX = 2;
-    static final int BURSTS_MIN = 1, BURSTS_MAX = 10;
-    static final Random R = new Random();
+    // ids de filas (2 de prontos + 3 de I/O)
+    static final int Q_HIGH = 0, Q_LOW = 1, Q_DISK = 2, Q_TAPE = 3, Q_PRINTER = 4, QN = 5;
 
-    // índices de filas
-    static final int QUEUE_HIGH = 0, QUEUE_LOW = 1, QUEUE_DISK = 2, QUEUE_TAPE = 3, QUEUE_PRINTER = 4;
-
-    // cenário
-    static int number_of_processes = 3;
-
-    // controle da simulação
-    static int clock_ticks = 0;
-    static int running_process_id = -1;   // processo atual na CPU (-1 = livre)
-    static int running_level = -1;        // 1 se veio da HIGH, 0 se veio da LOW
-    static int finished_count = 0;
-
-    // filas de prontos e I/O
-    static int[] ready_queue_high = new int[MAX_PROCS];
-    static int[] ready_queue_low  = new int[MAX_PROCS];
-    static int[] io_queue_disk    = new int[MAX_PROCS];
-    static int[] io_queue_tape    = new int[MAX_PROCS];
-    static int[] io_queue_printer = new int[MAX_PROCS];
-
-    // controle de fila circular (head/tail/count)
-    static int ready_high_head,  ready_high_tail,  ready_high_count  = 0;
-    static int ready_low_head,   ready_low_tail,   ready_low_count   = 0;
-    static int disk_head,        disk_tail,        disk_count        = 0;
-    static int tape_head,        tape_tail,        tape_count        = 0;
-    static int printer_head,     printer_tail,     printer_count     = 0;
+    // filas genéricas
+    static int[][] queue = new int[QN][MAX_PROCS];
+    static int[] head = new int[QN], tail = new int[QN], count = new int[QN];
 
     // estados e dispositivos
-    static final int STATE_NEW = 0, STATE_READY = 1, STATE_RUNNING = 2, STATE_BLOCKED = 3, STATE_FINISHED = 4;
-    static final int IO_DEVICE_NONE = 0, IO_DEVICE_DISK = 1, IO_DEVICE_TAPE = 2, IO_DEVICE_PRINTER = 3;
+    static final int READY = 1, RUN = 2, BLOCK = 3, FIN = 4;
+    static final int NONE = 0, DISK = 1, TAPE = 2, PRINTER = 3;
 
-    // “PCB” em arrays (índice = process_id)
-    static int[] process_id            = new int[MAX_PROCS];
-    static int[] parent_process_id     = new int[MAX_PROCS];
-    static int[] process_status        = new int[MAX_PROCS];
-    static int[] process_priority      = new int[MAX_PROCS]; // 1=alta, 0=baixa (preferência)
-    static int[] current_burst_index   = new int[MAX_PROCS]; // índice do burst atual
-    static int[] remaining_cpu_time    = new int[MAX_PROCS];
-    static int[] remaining_io_time     = new int[MAX_PROCS];
-    static int[] quantum_left          = new int[MAX_PROCS];
-    static int[] total_cpu_time        = new int[MAX_PROCS];
-    static int[] number_of_bursts      = new int[MAX_PROCS];
+    // “PCB” em arrays simples
+    static int[] pid = new int[MAX_PROCS];
+    static int[] ppid = new int[MAX_PROCS];               // PPID (aqui sempre -1)
+    static int[] priority = new int[MAX_PROCS];           // 1 = HIGH, 0 = LOW
+    static int[] status = new int[MAX_PROCS];             // READY/RUN/BLOCK/FIN
+    static int[] burstIndex = new int[MAX_PROCS];         // qual burst está
+    static int[] cpuTimeLeft = new int[MAX_PROCS];        // tempo restante do burst de CPU atual
+    static int[] ioTimeLeft = new int[MAX_PROCS];         // tempo restante de I/O
+    static int[] quantumLeft = new int[MAX_PROCS];        // quantum restante
+    static int[] cpuTotal = new int[MAX_PROCS];           // apenas estatística
+    static int[] finishTime = new int[MAX_PROCS];         // turnaround (chegada = 0)
+    static int[] waitReady = new int[MAX_PROCS];          // tempo esperando em prontos
 
-    static int[][] cpu_burst           = new int[MAX_PROCS][MAX_BURSTS];
-    static int[][] io_type             = new int[MAX_PROCS][MAX_BURSTS];
-    static int[][] io_duration         = new int[MAX_PROCS][MAX_BURSTS];
+    static int[][] cpuBurst = new int[MAX_PROCS][MAX_BURSTS];
+    static int[][] ioDeviceType = new int[MAX_PROCS][MAX_BURSTS];
+    static int[][] ioDuration = new int[MAX_PROCS][MAX_BURSTS];
+    static int[] burstsCount = new int[MAX_PROCS];
 
-    // métricas simples
-    static int[] finish_time           = new int[MAX_PROCS]; // turnaround (chegada = 0)
-    static int[] ready_wait_time       = new int[MAX_PROCS]; // espera em filas de prontos
+    // controle “global”
+    static int clock = 0, running = -1, runningCameFrom = -1, finished = 0;
 
-    // ------------------------------------------------------------
-    // FILAS (enqueue / dequeue / peek)
-    // ------------------------------------------------------------
-    static boolean enqueue(int queue_id, int pid) {
-        switch (queue_id) {
-            case QUEUE_HIGH: {
-                if (ready_high_count == MAX_PROCS) { return false; }
-                ready_queue_high[ready_high_tail] = pid;
-                ready_high_tail = (ready_high_tail + 1) % MAX_PROCS;
-                ready_high_count++;
-                return true;
-            }
-            case QUEUE_LOW: {
-                if (ready_low_count == MAX_PROCS) { return false; }
-                ready_queue_low[ready_low_tail] = pid;
-                ready_low_tail = (ready_low_tail + 1) % MAX_PROCS;
-                ready_low_count++;
-                return true;
-            }
-            case QUEUE_DISK: {
-                if (disk_count == MAX_PROCS) { return false; }
-                io_queue_disk[disk_tail] = pid;
-                disk_tail = (disk_tail + 1) % MAX_PROCS;
-                disk_count++;
-                return true;
-            }
-            case QUEUE_TAPE: {
-                if (tape_count == MAX_PROCS) { return false; }
-                io_queue_tape[tape_tail] = pid;
-                tape_tail = (tape_tail + 1) % MAX_PROCS;
-                tape_count++;
-                return true;
-            }
-            case QUEUE_PRINTER: {
-                if (printer_count == MAX_PROCS) { return false; }
-                io_queue_printer[printer_tail] = pid;
-                printer_tail = (printer_tail + 1) % MAX_PROCS;
-                printer_count++;
-                return true;
-            }
-        }
-        return false;
+    // util
+    static int rnd(int a, int b) {
+        return a + R.nextInt(b - a + 1);
     }
 
-    static int dequeue(int queue_id) {
-        switch (queue_id) {
-            case QUEUE_HIGH: {
-                if (ready_high_count == 0) { return -1; }
-                int pid = ready_queue_high[ready_high_head];
-                ready_high_head = (ready_high_head + 1) % MAX_PROCS;
-                ready_high_count--;
-                return pid;
-            }
-            case QUEUE_LOW: {
-                if (ready_low_count == 0) { return -1; }
-                int pid = ready_queue_low[ready_low_head];
-                ready_low_head = (ready_low_head + 1) % MAX_PROCS;
-                ready_low_count--;
-                return pid;
-            }
-            case QUEUE_DISK: {
-                if (disk_count == 0) { return -1; }
-                int pid = io_queue_disk[disk_head];
-                disk_head = (disk_head + 1) % MAX_PROCS;
-                disk_count--;
-                return pid;
-            }
-            case QUEUE_TAPE: {
-                if (tape_count == 0) { return -1; }
-                int pid = io_queue_tape[tape_head];
-                tape_head = (tape_head + 1) % MAX_PROCS;
-                tape_count--;
-                return pid;
-            }
-            case QUEUE_PRINTER: {
-                if (printer_count == 0) { return -1; }
-                int pid = io_queue_printer[printer_head];
-                printer_head = (printer_head + 1) % MAX_PROCS;
-                printer_count--;
-                return pid;
-            }
+    // filas
+    static boolean enqueue(int qid, int x) {
+        if (count[qid] == MAX_PROCS) {
+            return false;
         }
-        return -1;
+        queue[qid][tail[qid]] = x;
+        tail[qid] = (tail[qid] + 1) % MAX_PROCS;
+        count[qid]++;
+        return true;
     }
 
-    static int peek(int queue_id) {
-        switch (queue_id) {
-            case QUEUE_HIGH:   { return ready_high_count == 0 ? -1 : ready_queue_high[ready_high_head]; }
-            case QUEUE_LOW:    { return ready_low_count  == 0 ? -1 : ready_queue_low[ready_low_head]; }
-            case QUEUE_DISK:   { return disk_count       == 0 ? -1 : io_queue_disk[disk_head]; }
-            case QUEUE_TAPE:   { return tape_count       == 0 ? -1 : io_queue_tape[tape_head]; }
-            case QUEUE_PRINTER:{ return printer_count    == 0 ? -1 : io_queue_printer[printer_head]; }
+    static int dequeue(int qid) {
+        if (count[qid] == 0) {
+            return -1;
         }
-        return -1;
+        int x = queue[qid][head[qid]];
+        head[qid] = (head[qid] + 1) % MAX_PROCS;
+        count[qid]--;
+        return x;
     }
 
-    // ------------------------------------------------------------
-    // WORKLOAD
-    // ------------------------------------------------------------
-    static void generate_process(int i) {
-        process_id[i]        = i;
-        parent_process_id[i] = 0; // "init" simples (atende o PDF)
+    // cria 1 processo aleatório (CPU 2..4 e I/O por tipo)
+    static void makeProc(int i) {
+        pid[i] = i;
+        ppid[i] = -1; // sem fork: “sem pai”
 
-        int bursts = BURSTS_MIN + R.nextInt(BURSTS_MAX - BURSTS_MIN + 1);
-        bursts = Math.min(bursts, MAX_BURSTS);
-        number_of_bursts[i] = bursts;
+        int bursts = rnd(1, MAX_BURSTS);
+        burstsCount[i] = bursts;
 
         for (int k = 0; k < bursts; k++) {
-            cpu_burst[i][k] = CPU_MIN + R.nextInt(CPU_MAX - CPU_MIN + 1);
+            cpuBurst[i][k] = rnd(CPU_MIN, CPU_MAX);
             if (k < bursts - 1) {
-                int device = 1 + R.nextInt(3); // 1=DISK, 2=TAPE, 3=PRINTER
-                io_type[i][k]     = device;
-                io_duration[i][k] = IO_MIN + R.nextInt(IO_MAX - IO_MIN + 1);
+                int device = rnd(1, 3); // 1 = DISK, 2 = TAPE, 3 = PRINTER
+                ioDeviceType[i][k] = device;
+                if (device == DISK) {
+                    ioDuration[i][k] = rnd(DISK_MIN, DISK_MAX);
+                } else if (device == TAPE) {
+                    ioDuration[i][k] = rnd(TAPE_MIN, TAPE_MAX);
+                } else {
+                    ioDuration[i][k] = rnd(PRINTER_MIN, PRINTER_MAX);
+                }
             } else {
-                io_type[i][k]     = IO_DEVICE_NONE;
-                io_duration[i][k] = 0;
+                ioDeviceType[i][k] = NONE;
+                ioDuration[i][k] = 0;
             }
         }
 
-        process_status[i]      = STATE_READY;
-        process_priority[i]    = 1; // inicia na alta
-        current_burst_index[i] = 0;
-        remaining_cpu_time[i]  = cpu_burst[i][0];
-        remaining_io_time[i]   = 0;
-        quantum_left[i]        = QUANTUM_HIGH;
-        total_cpu_time[i]      = 0;
-
-        enqueue(QUEUE_HIGH, i);
+        status[i] = READY;
+        burstIndex[i] = 0;
+        cpuTimeLeft[i] = cpuBurst[i][0];
+        quantumLeft[i] = QUANTUM_HIGH; // começa em HIGH
+        priority[i] = 1;               // prioridade explícita
+        enqueue(Q_HIGH, i);
     }
 
-    static void setup_random_workload(int n) {
+    // imprime workload (por extenso)
+    static void dumpWork(int n) {
+        System.out.println("== Carga de Trabalho ==");
         for (int i = 0; i < n; i++) {
-            generate_process(i);
-        }
-        dump_workload(n);
-    }
+            StringBuilder sb = new StringBuilder();
+            sb.append("PID ").append(pid[i])
+              .append(" (PPID = ").append(ppid[i])
+              .append(", prioridade = ").append(priority[i] == 1 ? "HIGH" : "LOW")
+              .append("): ");
 
-    static void dump_workload(int n) {
-        System.out.println("== Workload (random) ==");
-        for (int i = 0; i < n; i++) {
-            StringBuilder sb = new StringBuilder("PID " + process_id[i] + " (PPID " + parent_process_id[i] + ") : ");
-            for (int k = 0; k < number_of_bursts[i]; k++) {
-                sb.append("CPU").append(cpu_burst[i][k]);
-                if (io_type[i][k] == IO_DEVICE_DISK) {
-                    sb.append("->DISK").append(io_duration[i][k]).append("->");
-                } else if (io_type[i][k] == IO_DEVICE_TAPE) {
-                    sb.append("->TAPE").append(io_duration[i][k]).append("->");
-                } else if (io_type[i][k] == IO_DEVICE_PRINTER) {
-                    sb.append("->PRINTER").append(io_duration[i][k]).append("->");
+            for (int k = 0; k < burstsCount[i]; k++) {
+                sb.append("CPU ").append(cpuBurst[i][k]).append(" ");
+                if (ioDeviceType[i][k] == DISK) {
+                    sb.append("depois DISK ").append(ioDuration[i][k]).append(" ");
+                } else if (ioDeviceType[i][k] == TAPE) {
+                    sb.append("depois TAPE ").append(ioDuration[i][k]).append(" ");
+                } else if (ioDeviceType[i][k] == PRINTER)  {
+                    sb.append("depois PRINTER ").append(ioDuration[i][k]).append(" ");
                 }
             }
-            if (sb.toString().endsWith("->")) {
-                sb.setLength(sb.length() - 2);
-            }
-            System.out.println(sb);
+            System.out.println(sb.toString().trim());
         }
     }
 
-    // ------------------------------------------------------------
-    // ESCALONADOR / I/O / CPU
-    // ------------------------------------------------------------
-    static void schedule_process() {
-        if (running_process_id != -1) { return; }
-
-        int pid = dequeue(QUEUE_HIGH);
-        if (pid != -1) {
-            running_process_id = pid;
-            running_level = 1;
-            process_status[pid] = STATE_RUNNING;
-            quantum_left[pid] = QUANTUM_HIGH;
-            System.out.println("t = " + clock_ticks + " | SCHEDULE HIGH -> process_id = " + pid);
+    // agenda (HIGH tem prioridade)
+    static void schedule() {
+        if (running != -1) {
             return;
         }
 
-        pid = dequeue(QUEUE_LOW);
-        if (pid != -1) {
-            running_process_id = pid;
-            running_level = 0;
-            process_status[pid] = STATE_RUNNING;
-            quantum_left[pid] = QUANTUM_LOW;
-            System.out.println("t = " + clock_ticks + " | SCHEDULE LOW  -> process_id = " + pid);
-        }
-    }
-
-    static void step_io_tick() {
-        if (disk_count > 0) {
-            int pid = io_queue_disk[disk_head];
-            remaining_io_time[pid]--;
-            if (remaining_io_time[pid] <= 0) {
-                dequeue(QUEUE_DISK);
-                process_status[pid] = STATE_READY;
-                process_priority[pid] = 0; // DISK volta baixa
-                enqueue(QUEUE_LOW, pid);
-                System.out.println("t = " + clock_ticks + " | IO_END DISK    process_id = " + pid + " -> LOW");
-            }
-        }
-
-        if (tape_count > 0) {
-            int pid = io_queue_tape[tape_head];
-            remaining_io_time[pid]--;
-            if (remaining_io_time[pid] <= 0) {
-                dequeue(QUEUE_TAPE);
-                process_status[pid] = STATE_READY;
-                process_priority[pid] = 1; // TAPE volta alta
-                enqueue(QUEUE_HIGH, pid);
-                System.out.println("t = " + clock_ticks + " | IO_END TAPE    process_id = " + pid + " -> HIGH");
-            }
-        }
-
-        if (printer_count > 0) {
-            int pid = io_queue_printer[printer_head];
-            remaining_io_time[pid]--;
-            if (remaining_io_time[pid] <= 0) {
-                dequeue(QUEUE_PRINTER);
-                process_status[pid] = STATE_READY;
-                process_priority[pid] = 1; // PRINTER volta alta
-                enqueue(QUEUE_HIGH, pid);
-                System.out.println("t = " + clock_ticks + " | IO_END PRINTER process_id = " + pid + " -> HIGH");
-            }
-        }
-    }
-
-    static void run_cpu_tick() {
-        // preempção: LOW rodando e chega alguém na HIGH
-        if (running_process_id != -1 && running_level == 0 && ready_high_count > 0) {
-            int pid = running_process_id;
-            process_status[pid] = STATE_READY;
-            enqueue(QUEUE_LOW, pid);
-            running_process_id = -1;
-            System.out.println("t = " + clock_ticks + " | PREEMPT process_id = " + pid + " (LOW)");
+        int p = dequeue(Q_HIGH);
+        if (p != -1) {
+            running = p;
+            runningCameFrom = 1;
+            status[p] = RUN;
+            quantumLeft[p] = QUANTUM_HIGH;
+            System.out.println("t = " + clock + " | Escalonador: selecionou PID " + p + " da fila HIGH");
             return;
         }
 
-        if (running_process_id == -1) { return; }
+        p = dequeue(Q_LOW);
+        if (p != -1) {
+            running = p;
+            runningCameFrom = 0;
+            status[p] = RUN;
+            quantumLeft[p] = QUANTUM_LOW;
+            System.out.println("t = " + clock + " | Escalonador: selecionou PID " + p + " da fila LOW");
+        }
+    }
 
-        int pid = running_process_id;
-        remaining_cpu_time[pid]--;
-        quantum_left[pid]--;
-        total_cpu_time[pid]++;
+    // I/O (processa só a cabeça de cada fila)
+    static void stepIO() {
+        if (count[Q_DISK] > 0) {
+            int p = queue[Q_DISK][head[Q_DISK]];
+            ioTimeLeft[p]--;
+            if (ioTimeLeft[p] <= 0) {
+                dequeue(Q_DISK);
+                status[p] = READY;
+                priority[p] = 0;
+                enqueue(Q_LOW, p); // disco retorna para LOW
+                System.out.println("t = " + clock + " | I/O concluído em DISK para PID " + p + " (retorna para LOW)");
+            }
+        }
 
-        System.out.println(
-            "t = " + clock_ticks + " | RUN process_id = " + pid +
-            " (cpu_remaining = " + remaining_cpu_time[pid] +
-            ", quantum_left = " + quantum_left[pid] + ")"
-        );
+        if (count[Q_TAPE] > 0) {
+            int p = queue[Q_TAPE][head[Q_TAPE]];
+            ioTimeLeft[p]--;
+            if (ioTimeLeft[p] <= 0) {
+                dequeue(Q_TAPE);
+                status[p] = READY;
+                priority[p] = 1;
+                enqueue(Q_HIGH, p); // fita retorna para HIGH
+                System.out.println("t = " + clock + " | I/O concluído em TAPE para PID " + p + " (retorna para HIGH)");
+            }
+        }
 
-        // fim de CPU burst
-        if (remaining_cpu_time[pid] <= 0) {
-            int k = current_burst_index[pid];
-            int device = io_type[pid][k];
+        if (count[Q_PRINTER] > 0) {
+            int p = queue[Q_PRINTER][head[Q_PRINTER]];
+            ioTimeLeft[p]--;
+            if (ioTimeLeft[p] <= 0) {
+                dequeue(Q_PRINTER);
+                status[p] = READY;
+                priority[p] = 1;
+                enqueue(Q_HIGH, p); // impressora retorna para HIGH
+                System.out.println("t = " + clock + " | I/O concluído em PRINTER para PID " + p + " (retorna para HIGH)");
+            }
+        }
+    }
 
-            if (device == IO_DEVICE_NONE) {
-                process_status[pid] = STATE_FINISHED;
-                finished_count++;
-                running_process_id = -1;
-                finish_time[pid] = clock_ticks;
-                System.out.println("t = " + clock_ticks + " | FINISH process_id = " + pid);
+    // 1 tick de CPU (preempção, fim de burst, timeout)
+    static void stepCPU() {
+        // preempção: se LOW está rodando e existe alguém em HIGH, tira LOW
+        if (running != -1 && runningCameFrom == 0 && count[Q_HIGH] > 0) {
+            int p = running;
+            status[p] = READY;
+            priority[p] = 0;
+            enqueue(Q_LOW, p);
+            running = -1;
+            System.out.println("t = " + clock + " | Preempção: removeu PID " + p + " (LOW) porque há processo em HIGH");
+            return;
+        }
+
+        if (running == -1) {
+            return;
+        }
+
+        int p = running;
+        cpuTimeLeft[p]--;
+        quantumLeft[p]--;
+        cpuTotal[p]++;
+
+        System.out.println("t = " + clock + " | Executando PID " + p + " (tempo de CPU restante = " + cpuTimeLeft[p] + ", quantum restante = " + quantumLeft[p] + ")");
+
+        // fim do burst de CPU
+        if (cpuTimeLeft[p] <= 0) {
+            int k = burstIndex[p];
+            int device = ioDeviceType[p][k];
+
+            if (device == NONE) {
+                status[p] = FIN;
+                finished++;
+                running = -1;
+                finishTime[p] = clock; // se quiser contar o tick atual completo, use clock + 1
+                System.out.println("t = " + clock + " | Finalização: PID " + p + " terminou a execução");
                 return;
             }
 
-            // vai para I/O do burst k
-            process_status[pid] = STATE_BLOCKED;
-            remaining_io_time[pid] = io_duration[pid][k];
-
-            // prepara próximo CPU (se existir)
-            current_burst_index[pid] = k + 1;
-            if (current_burst_index[pid] < number_of_bursts[pid]) {
-                remaining_cpu_time[pid] = cpu_burst[pid][current_burst_index[pid]];
+            // vai para I/O do burst atual
+            status[p] = BLOCK;
+            ioTimeLeft[p] = ioDuration[p][k];
+            burstIndex[p] = k + 1;
+            if (burstIndex[p] < burstsCount[p]) {
+                cpuTimeLeft[p] = cpuBurst[p][burstIndex[p]];
             }
 
-            if (device == IO_DEVICE_DISK) {
-                enqueue(QUEUE_DISK, pid);
-                System.out.println(
-                    "t = " + clock_ticks + " | IO_START DISK    process_id = " + pid +
-                    " | duration = " + remaining_io_time[pid]
-                );
-            } else if (device == IO_DEVICE_TAPE) {
-                enqueue(QUEUE_TAPE, pid);
-                System.out.println(
-                    "t = " + clock_ticks + " | IO_START TAPE    process_id = " + pid +
-                    " | duration = " + remaining_io_time[pid]
-                );
+            if (device == DISK) {
+                enqueue(Q_DISK, p);
+                System.out.println("t = " + clock + " | Início de I/O em DISK para PID " + p + " (duração = " + ioTimeLeft[p] + ")");
+            } else if (device == TAPE) {
+                enqueue(Q_TAPE, p);
+                System.out.println("t = " + clock + " | Início de I/O em TAPE para PID " + p + " (duração = " + ioTimeLeft[p] + ")");
             } else {
-                enqueue(QUEUE_PRINTER, pid);
-                System.out.println(
-                    "t = " + clock_ticks + " | IO_START PRINTER process_id = " + pid +
-                    " | duration = " + remaining_io_time[pid]
-                );
+                enqueue(Q_PRINTER, p);
+                System.out.println("t = " + clock + " | Início de I/O em PRINTER para PID " + p + " (duração = " + ioTimeLeft[p] + ")");
             }
 
-            running_process_id = -1;
+            running = -1;
             return;
         }
 
-        // acabou o quantum e ainda tem CPU
-        if (quantum_left[pid] <= 0) {
-            process_status[pid] = STATE_READY;
-            enqueue(QUEUE_LOW, pid); // vai pra LOW
-            running_process_id = -1;
-            System.out.println(
-                "t = " + clock_ticks + " | TIMEOUT process_id = " + pid +
-                " -> LOW (cpu_remaining = " + remaining_cpu_time[pid] + ")"
-            );
+        // estourou o quantum (volta para LOW)
+        if (quantumLeft[p] <= 0) {
+            status[p] = READY;
+            priority[p] = 0;
+            enqueue(Q_LOW, p);
+            running = -1;
+            System.out.println("t = " + clock + " | Fim de quantum: PID " + p + " retorna para LOW (tempo de CPU restante = " + cpuTimeLeft[p] + ")");
         }
     }
 
-    // MÉTRICAS / LOG AUXILIAR
-    static void accrue_waiting_ready() {
-        for (int i = 0; i < number_of_processes; i++) {
-            if (process_status[i] == STATE_READY) {
-                ready_wait_time[i]++;
+    // acumula espera em prontos
+    static void tickWaitReady() {
+        for (int i = 0; i < PROCS; i++) {
+            if (status[i] == READY) {
+                waitReady[i]++;
             }
         }
     }
 
-    static void print_statistics() {
+    // estatísticas simples
+    static void stats() {
         System.out.println("== Estatísticas ==");
-        double sum_turnaround = 0, sum_wait = 0;
-        for (int i = 0; i < number_of_processes; i++) {
-            int turnaround = finish_time[i];
-            sum_turnaround += turnaround;
-            sum_wait += ready_wait_time[i];
-            System.out.println("PID " + process_id[i] + " (PPID " + parent_process_id[i] + ")" +
-                    " | turnaround = " + turnaround +
-                    " | esperaReady = " + ready_wait_time[i] +
-                    " | cpuTotal = " + total_cpu_time[i]);
+        double sumTurnaround = 0.0, sumWaitReady = 0.0;
+
+        for (int i = 0; i < PROCS; i++) {
+            sumTurnaround += finishTime[i];
+            sumWaitReady += waitReady[i];
+            System.out.println(
+                "PID " + pid[i] +
+                " (PPID = " + ppid[i] +
+                ", prioridade final = " + (priority[i] == 1 ? "HIGH" : "LOW") + ")" +
+                " | turnaround = " + finishTime[i] +
+                " | espera em prontos = " + waitReady[i] +
+                " | total de tempo de CPU = " + cpuTotal[i] +
+                " | quantidade de bursts = " + burstsCount[i]
+            );
         }
-        System.out.println("média turnaround = " + (sum_turnaround / number_of_processes));
-        System.out.println("média esperaReady = " + (sum_wait / number_of_processes));
+
+        System.out.println("média de turnaround = " + (sumTurnaround / PROCS));
+        System.out.println("média de espera em prontos = " + (sumWaitReady / PROCS));
     }
 
-    // ------------------------------------------------------------
-    // MAIN
-    // ------------------------------------------------------------
+    // main
     public static void main(String[] args) {
-        setup_random_workload(number_of_processes);
+
+        // cria processos e mostra a carga de trabalho
+        for (int i = 0; i < PROCS; i++) {
+            makeProc(i);
+        }
+        dumpWork(PROCS);
 
         int MAX_TIME = 500;
-        while (finished_count < number_of_processes && clock_ticks < MAX_TIME) {
-            if (running_process_id == -1) { schedule_process(); }
-            step_io_tick();
-            run_cpu_tick();
-            accrue_waiting_ready();
-            clock_ticks++;
+        while (finished < PROCS && clock < MAX_TIME) {
+            if (running == -1) {
+                schedule();
+            }
+            stepIO();
+            stepCPU();
+            tickWaitReady();
+            clock++;
         }
-        System.out.println("--- fim --- t = " + clock_ticks +
-                " finished = " + finished_count + "/" + number_of_processes);
-        print_statistics();
+
+        System.out.println("--- Fim da simulação --- tempo = " + clock + " | processos finalizados = " + finished + " de " + PROCS);
+        stats();
     }
 }
