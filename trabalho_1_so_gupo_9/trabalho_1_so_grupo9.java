@@ -26,8 +26,13 @@ public class trabalho_1_so_grupo9 {
     static int tapeIoHead, tapeIoTail, tapeIoCount = 0;
     static int printerIoHead, printerIoTail, printerIoCount = 0;
 
-    // funcao de inserir processo na fila de alta prioridade
-    public static void pushHi(int processId) {
+    // funcao de inserir processo de uma fila
+    public static void push(int fila, int processId) {
+        
+    }
+
+    // funcao de remover o ultimo processo de uma fila
+    public static void popProcess(int fila) {
         
     }
 
