@@ -28,11 +28,18 @@ public class trabalho_1_so_grupo9 {
 
     // funcao de inserir processo de uma fila
     public static void push(int fila, int processId) {
-        
+        if (){
+
+        }
     }
 
     // funcao de remover o ultimo processo de uma fila
     public static void popProcess(int fila) {
+        
+    }
+
+    // funcao de remover o ultimo processo de uma fila
+    public static void peekProcess(int fila) {
         
     }
 
