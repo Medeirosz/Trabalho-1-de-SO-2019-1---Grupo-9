@@ -1,6 +1,3 @@
-// Simulador MUITO simples de RR com feedback (2 filas de prontos) + 3 filas de I/O).
-// Estilo: poucos métodos, variáveis claras e comentários curtos.
-
 package sistemas_operacionais_I.trabalho_1_so_gupo_9;
 
 import java.util.Random;
